@@ -10,19 +10,23 @@ go get -u github.com/crochee/reqest
 ### Basic
 ```go
 import (
+    "context"
+    
     "github.com/crochee/reqest"
 )
 
-var result struct{
+func foo(ctx context.Context) {
+	var result struct {
 		Content string `json:"content"`
 	}
-
-err := reqest.DefaultTransport.
-	    Method(http.MethodGet).
+	return reqest.DefaultTransport.
+		Method(http.MethodGet).
 		Prefix("v2").
 		Param("flavor_types", "").
 		Param("sys_volume_types", "SysVolumeTypes").
 		Do(context.Background(), &result)
+}
+
 ```
 ### Multiple
 client.go
@@ -47,7 +51,7 @@ func NewClient() IClient {
 
 
 func NewBaseClient() IClient {
-return &baseClient{reqest.NewResource().Endpoint("http://localhost:80")}
+    return &baseClient{reqest.NewResource().Endpoint("http://localhost:80")}
 }
 
 type baseClient struct {
@@ -67,7 +71,7 @@ import (
 )
 
 type AreaSrv interface {
-	List(ctx context.Context) error
+    List(ctx context.Context) error
 }
 
 type Area struct {
@@ -89,4 +93,4 @@ func (a Area) List(ctx context.Context) error {
 }
 ```
 # Contributing
-If you have a bug report or feature request, you can open an issue.
+If you have a bug report or feature request, you can [open an issue](https://github.com/crochee/reqest/issues/new).
