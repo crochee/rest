@@ -93,4 +93,4 @@ func (a Area) List(ctx context.Context) error {
 }
 ```
 # Contributing
-If you have a bug report or feature request, you can [open an issue](https://github.com/crochee/reqest/issues/new).
+If you have a bug report or feature request, you can [open an issue](https://github.com/crochee/reqest/issues/new) or [pull request](https://github.com/crochee/reqest/pulls).
