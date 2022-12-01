@@ -41,10 +41,14 @@ func (j JsonRequest) Build(ctx context.Context, method string, url string, body 
 	}
 	for key, values := range headers {
 		for _, value := range values {
-			req.Header.Set(key, value)
+			req.Header.Add(key, value)
 		}
 	}
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Content-Length", strconv.FormatInt(req.ContentLength, 10))
+	if req.ContentLength == 0 {
+		req.Header.Del("content-type")
+	} else {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		req.Header.Set("Content-Length", strconv.FormatInt(req.ContentLength, 10))
+	}
 	return req, nil
 }
