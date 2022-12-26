@@ -22,8 +22,8 @@ func foo(ctx context.Context) {
 	return reqest.DefaultTransport.
 		Method(http.MethodGet).
 		Prefix("v2").
-		Param("flavor_types", "").
-		Param("sys_volume_types", "SysVolumeTypes").
+		Query("flavor_types").
+		Query("sys_volume_types", "SysVolumeTypes").
 		Do(context.Background(), &result)
 }
 
@@ -83,8 +83,8 @@ func (a Area) List(ctx context.Context) error {
     if err := a.To().
         Get().
         Prefix("v2").
-        Param("limit", "20").
-        Param("offset", "0").
+        Query("limit", "20").
+        Query("offset", "0").
         Do(ctx, &result); err != nil {
         return err
     }

@@ -1,11 +1,10 @@
 package reqest
 
 import (
+	"encoding/json"
 	"fmt"
 	"mime"
 	"net/http"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 type Func func(*http.Response) error
@@ -39,7 +38,7 @@ func (j JsonResponse) Parse(resp *http.Response, result interface{}, opts ...Fun
 	if mediaType != "application/json" {
 		return fmt.Errorf("can't parse body with %s", mediaType)
 	}
-	decoder := jsoniter.ConfigCompatibleWithStandardLibrary.NewDecoder(resp.Body)
+	decoder := json.NewDecoder(resp.Body)
 	decoder.UseNumber()
 	return decoder.Decode(result)
 }

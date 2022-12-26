@@ -3,6 +3,7 @@ package reqest
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"path"
 	"strings"
 
-	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/multierr"
 )
 
@@ -180,12 +180,12 @@ func (r *restfulClient) Body(obj interface{}) RESTClient {
 	case io.Reader:
 		r.body = t
 	default:
-		content, err := jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(t)
+		content, err := json.Marshal(t)
 		if err != nil {
 			return r.AddError(err)
 		}
 		r.body = bytes.NewReader(content)
-		r.Header("Content-Type", "application/json; charset=utf-8'")
+		r.Header("Content-Type", "application/json; charset=utf-8")
 	}
 	return r
 }
@@ -235,7 +235,7 @@ func (r *restfulClient) DoReader(ctx context.Context) (io.Reader, error) {
 func (r *restfulClient) URL() *url.URL {
 	p := r.pathPrefix
 	if len(r.resource) != 0 {
-		p = path.Join(p, strings.ToLower(r.resource))
+		p = path.Join(p, r.resource)
 	}
 	// Join trims trailing slashes, so preserve r.pathPrefix's trailing slash for backwards compatibility if nothing was changed
 	if len(r.resourceName) != 0 || len(r.subPath) != 0 || len(r.subresource) != 0 {
@@ -245,7 +245,7 @@ func (r *restfulClient) URL() *url.URL {
 	if r.baseURL != nil {
 		*finalURL = *r.baseURL
 	}
-	finalURL.Path = p
+	finalURL.Path = path.Join(finalURL.Path, p)
 	query := url.Values{}
 	for key, values := range r.params {
 		for _, value := range values {

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -18,7 +17,10 @@ type JsonRequest struct {
 }
 
 func (j JsonRequest) Build(ctx context.Context, method string, url string, body interface{}, headers http.Header) (*http.Request, error) {
-	var reader io.Reader
+	var (
+		reader     io.Reader
+		objectData bool
+	)
 	if body != nil {
 		switch data := body.(type) {
 		case string:
@@ -32,6 +34,7 @@ func (j JsonRequest) Build(ctx context.Context, method string, url string, body 
 			if err != nil {
 				return nil, err
 			}
+			objectData = true
 			reader = bytes.NewReader(content)
 		}
 	}
@@ -44,11 +47,10 @@ func (j JsonRequest) Build(ctx context.Context, method string, url string, body 
 			req.Header.Add(key, value)
 		}
 	}
-	if req.ContentLength == 0 {
-		req.Header.Del("content-type")
-	} else {
+
+	if objectData {
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
-		req.Header.Set("Content-Length", strconv.FormatInt(req.ContentLength, 10))
 	}
+
 	return req, nil
 }

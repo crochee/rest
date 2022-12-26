@@ -1,10 +1,9 @@
 package reqest
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 // DefaultFunc provides default error handling function implementation.
@@ -14,7 +13,7 @@ var DefaultFunc = []Func{ErrorFunc(http.StatusOK)}
 func ErrorFunc(expectStatusCode int) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		if resp.StatusCode != expectStatusCode {
-			decoder := jsoniter.ConfigCompatibleWithStandardLibrary.NewDecoder(resp.Body)
+			decoder := json.NewDecoder(resp.Body)
 			decoder.UseNumber()
 			var result struct {
 				Code    string      `json:"code"`
