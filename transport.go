@@ -12,6 +12,7 @@ type Transport interface {
 
 	Request() Requester
 	Response() Response
+	Client() http.RoundTripper
 
 	Method(string) RESTClient
 	Get() RESTClient
@@ -92,6 +93,10 @@ func (t *transporter) Request() Requester {
 
 func (t *transporter) Response() Response {
 	return t.resp
+}
+
+func (t *transporter) Client() http.RoundTripper {
+	return t.roundTripper
 }
 
 func (t *transporter) Method(method string) RESTClient {

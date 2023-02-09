@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gorilla/schema"
 	"go.uber.org/multierr"
 )
 
@@ -22,6 +23,8 @@ type RESTClient interface {
 	Name(resourceName string) RESTClient
 	SubResource(subResources ...string) RESTClient
 	Query(key string, value ...string) RESTClient
+	QueryAny(value interface{}) RESTClient
+	Headers(header http.Header) RESTClient
 	Header(key string, values ...string) RESTClient
 	Body(obj interface{}) RESTClient
 	Do(ctx context.Context, result interface{}, opts ...Func) error
@@ -150,6 +153,79 @@ func (r *restfulClient) Query(key string, values ...string) RESTClient {
 	}
 	for _, value := range values {
 		r.params.Add(key, value)
+	}
+	return r
+}
+
+var QueryEncoder = func() *schema.Encoder {
+	e := schema.NewEncoder()
+	e.SetAliasTag("query")
+	return e
+}()
+
+func (r *restfulClient) QueryAny(value interface{}) RESTClient {
+	if value == nil {
+		return r
+	}
+	form := url.Values{}
+	if err := QueryEncoder.Encode(value, form); err != nil {
+		return r.AddError(err)
+	}
+	if r.params == nil {
+		r.params = form
+		return r
+	}
+	r.params = make(url.Values, len(form))
+	for key, srcValues := range form {
+		dstValues, ok := r.params[key]
+		if !ok {
+			for _, srcValue := range srcValues {
+				r.params.Add(key, srcValue)
+			}
+			continue
+		}
+		for _, srcValue := range srcValues {
+			found := false
+			for _, dstValue := range dstValues {
+				if srcValue == dstValue {
+					found = true
+					break
+				}
+			}
+			if !found {
+				r.params.Add(key, srcValue)
+			}
+		}
+	}
+	return r
+}
+
+func (r *restfulClient) Headers(header http.Header) RESTClient {
+	if r.headers == nil {
+		r.headers = header
+		return r
+	}
+	r.headers = make(http.Header, len(header))
+	for key, srcValues := range header {
+		dstValues, ok := r.headers[key]
+		if !ok {
+			for _, srcValue := range srcValues {
+				r.headers.Add(key, srcValue)
+			}
+			continue
+		}
+		for _, srcValue := range srcValues {
+			found := false
+			for _, dstValue := range dstValues {
+				if srcValue == dstValue {
+					found = true
+					break
+				}
+			}
+			if !found {
+				r.headers.Add(key, srcValue)
+			}
+		}
 	}
 	return r
 }
