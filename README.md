@@ -9,87 +9,90 @@ go get -u github.com/crochee/reqest
 ## Usage
 ### Basic
 ```go
+package main
+
 import (
-    "context"
-    
-    "github.com/crochee/reqest"
+	"context"
+	"log"
+
+	"github.com/crochee/reqest"
 )
 
-func foo(ctx context.Context) {
+func main() {
 	var result struct {
 		Content string `json:"content"`
 	}
-	return reqest.DefaultTransport.
-		Method(http.MethodGet).
+	if err := reqest.
+		DefaultTransport.
+		Get().
 		Prefix("v2").
-		Query("flavor_types").
-		Query("sys_volume_types", "SysVolumeTypes").
-		Do(context.Background(), &result)
+		Query("page_size", "20").
+		Do(context.Background(), &result); err != nil {
+		log.Println(err)
+	}
 }
-
 ```
 ### Multiple
 client.go
 ```go
+package main
+
 import (
-    "github.com/crochee/reqest"
+	"context"
+	"log"
+
+	"github.com/crochee/reqest"
 )
 
 type IClient interface {
-    Area() AreaSrv
+	Area() AreaSrv
 }
 
-var iClient IClient
-
-func SetClient(c IClient) {
-    iClient = c
-}
-
-func NewClient() IClient {
-    return iClient
-}
-
-
-func NewBaseClient() IClient {
-    return &baseClient{reqest.NewResource().Endpoint("http://localhost:80")}
+func NewGateway() IClient {
+	return &baseClient{reqest.NewHandler().Endpoint("http://localhost:80")}
 }
 
 type baseClient struct {
-    reqest.Resource
+	reqest.Handler
 }
 
 func (c baseClient) Area() AreaSrv {
-    return Area{c.Resource("areas")}
+	return areaSrv{c.Resource("areas")}
 }
-```
-area.go
-```go
-import (
-    "log"
-	
-    "github.com/crochee/reqest"
-)
 
 type AreaSrv interface {
-    List(ctx context.Context) error
+	Get(ctx context.Context, id string) (*Areas, error)
 }
 
-type Area struct {
-    reqest.Resource
+type areaSrv struct {
+	reqest.Handler
 }
 
-func (a Area) List(ctx context.Context) error {
-    var result interface{}
-    if err := a.To().
-        Get().
-        Prefix("v2").
-        Query("limit", "20").
-        Query("offset", "0").
-        Do(ctx, &result); err != nil {
-        return err
-    }
-    log.Println(result)
-    return nil
+func (a areaSrv) Get(ctx context.Context, id string) (*Areas, error) {
+	var result Areas
+	if err := a.To().
+		Get().
+		Prefix("v2").
+		Name(id).
+		Do(ctx, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+type Areas struct {
+	List     []string `json:"list"`
+	PageNum  int      `json:"page_num"`
+	PageSize int      `json:"page_size"`
+	Total    int      `json:"total"`
+}
+
+func main() {
+	result, err := NewGateway().Area().Get(context.Background(), "12")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(result)
 }
 ```
 # Contributing

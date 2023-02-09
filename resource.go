@@ -2,13 +2,13 @@ package reqest
 
 import "net/http"
 
-type Resource interface {
-	Endpoint(endpoint string) Resource
-	Resource(resource string) Resource
+type Handler interface {
+	Endpoint(endpoint string) Handler
+	Resource(resource string) Handler
 	To() Transport
 }
 
-func NewResource() Resource {
+func NewHandler() Handler {
 	return &ResourceHandler{}
 }
 
@@ -17,14 +17,14 @@ type ResourceHandler struct {
 	endpoint string
 }
 
-func (r *ResourceHandler) Endpoint(endpoint string) Resource {
+func (r *ResourceHandler) Endpoint(endpoint string) Handler {
 	return &ResourceHandler{
 		resource: r.resource,
 		endpoint: endpoint,
 	}
 }
 
-func (r *ResourceHandler) Resource(resource string) Resource {
+func (r *ResourceHandler) Resource(resource string) Handler {
 	return &ResourceHandler{
 		resource: resource,
 		endpoint: r.endpoint,
@@ -79,6 +79,10 @@ func (t *fixTransport) Request() Requester {
 
 func (t *fixTransport) Response() Response {
 	return t.t.Response()
+}
+
+func (t *fixTransport) Client() http.RoundTripper {
+	return t.t.Client()
 }
 
 func (t *fixTransport) Method(method string) RESTClient {
