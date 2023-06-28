@@ -9,29 +9,29 @@ type Handler interface {
 }
 
 func NewHandler() Handler {
-	return &ResourceHandler{}
+	return &resourceHandler{}
 }
 
-type ResourceHandler struct {
+type resourceHandler struct {
 	resource string
 	endpoint string
 }
 
-func (r *ResourceHandler) Endpoint(endpoint string) Handler {
-	return &ResourceHandler{
+func (r *resourceHandler) Endpoint(endpoint string) Handler {
+	return &resourceHandler{
 		resource: r.resource,
 		endpoint: endpoint,
 	}
 }
 
-func (r *ResourceHandler) Resource(resource string) Handler {
-	return &ResourceHandler{
+func (r *resourceHandler) Resource(resource string) Handler {
+	return &resourceHandler{
 		resource: resource,
 		endpoint: r.endpoint,
 	}
 }
 
-func (r *ResourceHandler) To() Transport {
+func (r *resourceHandler) To() Transport {
 	return &fixTransport{
 		t:        DefaultTransport,
 		resource: r.resource,
@@ -88,24 +88,4 @@ func (t *fixTransport) Client() http.RoundTripper {
 func (t *fixTransport) Method(method string) RESTClient {
 	r := &restfulClient{c: t.t, verb: method}
 	return r.Endpoints(t.endpoint).Resource(t.resource)
-}
-
-func (t *fixTransport) Get() RESTClient {
-	return t.Method(http.MethodGet)
-}
-
-func (t *fixTransport) Post() RESTClient {
-	return t.Method(http.MethodPost)
-}
-
-func (t *fixTransport) Delete() RESTClient {
-	return t.Method(http.MethodDelete)
-}
-
-func (t *fixTransport) Put() RESTClient {
-	return t.Method(http.MethodPut)
-}
-
-func (t *fixTransport) Patch() RESTClient {
-	return t.Method(http.MethodPatch)
 }
