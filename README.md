@@ -14,7 +14,7 @@ package main
 import (
 	"context"
 	"log"
-    "net/http"
+        "net/http"
 
 	"github.com/crochee/reqest"
 )
@@ -39,7 +39,7 @@ package main
 import (
 	"context"
 	"log"
-    "net/http"
+        "net/http"
 
 	"github.com/crochee/reqest"
 )
