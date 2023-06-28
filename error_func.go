@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+type Func func(*http.Response) error
+
 // DefaultFunc provides default error handling function implementation.
 // If the implementation does not meet your needs, you can change it yourself
 var DefaultFunc = []Func{ErrorFunc(http.StatusOK)}

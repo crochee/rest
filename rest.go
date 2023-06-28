@@ -6,29 +6,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/gorilla/schema"
 	"go.uber.org/multierr"
 )
 
 type RESTClient interface {
+	// Endpoints  add  endpoints to the client
 	Endpoints(endpoint string) RESTClient
+
 	Prefix(segments ...string) RESTClient
+
 	Suffix(segments ...string) RESTClient
+
 	Resource(resource string) RESTClient
+
 	Name(resourceName string) RESTClient
+
 	SubResource(subResources ...string) RESTClient
+
 	Query(key string, value ...string) RESTClient
-	QueryAny(value interface{}) RESTClient
+
+	Querys(value interface{}) RESTClient
+
 	Headers(header http.Header) RESTClient
+
 	Header(key string, values ...string) RESTClient
+
 	Body(obj interface{}) RESTClient
+
+	Retry(attempts int, interval time.Duration,
+		shouldRetryFunc func(err error, statusCode int) bool) RESTClient
+
 	Do(ctx context.Context, result interface{}, opts ...Func) error
+
 	DoNop(ctx context.Context, opts ...Func) error
+
 	DoReader(ctx context.Context) (io.Reader, error)
 }
 
@@ -66,7 +86,10 @@ type restfulClient struct {
 	subPath    string
 	params     url.Values
 	headers    http.Header
-
+	// retry
+	attempts        int
+	interval        time.Duration
+	shouldRetryFunc func(error, int) bool
 	// structural elements of the request that are part of the Kubernetes API conventions
 	resource     string
 	resourceName string
@@ -163,7 +186,7 @@ var QueryEncoder = func() *schema.Encoder {
 	return e
 }()
 
-func (r *restfulClient) QueryAny(value interface{}) RESTClient {
+func (r *restfulClient) Querys(value interface{}) RESTClient {
 	if value == nil {
 		return r
 	}
@@ -266,6 +289,58 @@ func (r *restfulClient) Body(obj interface{}) RESTClient {
 	return r
 }
 
+func (r *restfulClient) Retry(attempts int, interval time.Duration,
+	shouldRetryFunc func(err error, statusCode int) bool) RESTClient {
+	r.attempts = attempts
+	r.interval = interval
+	r.shouldRetryFunc = shouldRetryFunc
+	return r
+}
+
+func (r *restfulClient) newBackOff() backoff.BackOff {
+	if r.attempts < 2 || r.interval <= 0 {
+		return &backoff.ZeroBackOff{}
+	}
+
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = r.interval
+	b.Multiplier = math.Pow(2, 1/float64(r.attempts-1))
+	b.Reset()
+	return b
+}
+
+func (r *restfulClient) roundTrip(req *http.Request, operate func(*http.Request) (int, error)) error {
+	// 需要重试的条件
+	if r.attempts >= 2 && r.interval > 0 {
+		body := req.Body
+		defer body.Close()
+		req.Body = io.NopCloser(body)
+	}
+	var attempts int
+	backOff := r.newBackOff() // 退避算法 保证时间间隔为指数级增长
+	currentInterval := 0 * time.Millisecond
+	t := time.NewTimer(currentInterval)
+	for {
+		select {
+		case <-t.C:
+			shouldRetry := attempts < r.attempts
+			statusCode, err := operate(req)
+			if !shouldRetry || (r.shouldRetryFunc != nil && !r.shouldRetryFunc(err, statusCode)) {
+				t.Stop()
+				return err
+			}
+			// 计算下一次
+			currentInterval = backOff.NextBackOff()
+			attempts++
+			// 定时器重置
+			t.Reset(currentInterval)
+		case <-req.Context().Done():
+			t.Stop()
+			return req.Context().Err()
+		}
+	}
+}
+
 func (r *restfulClient) Do(ctx context.Context, result interface{}, opts ...Func) error {
 	if r.err != nil {
 		return r.err
@@ -275,12 +350,14 @@ func (r *restfulClient) Do(ctx context.Context, result interface{}, opts ...Func
 	if err != nil {
 		return err
 	}
-	var resp *http.Response
-	if resp, err = r.c.RoundTrip(req); err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return r.c.Response().Parse(resp, result, opts...)
+	return r.roundTrip(req, func(req *http.Request) (int, error) {
+		resp, err := r.c.RoundTrip(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode, r.c.Response().Parse(resp, result, opts...)
+	})
 }
 
 func (r *restfulClient) DoNop(ctx context.Context, opts ...Func) error {
@@ -296,13 +373,18 @@ func (r *restfulClient) DoReader(ctx context.Context) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	var resp *http.Response
-	if resp, err = r.c.RoundTrip(req); err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+
 	var buffer bytes.Buffer
-	if _, err = io.Copy(&buffer, resp.Body); err != nil {
+	if err = r.roundTrip(req, func(req *http.Request) (int, error) {
+		resp, err := r.c.RoundTrip(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+		buffer.Reset()
+		_, err = io.Copy(&buffer, resp.Body)
+		return resp.StatusCode, err
+	}); err != nil {
 		return nil, err
 	}
 	return &buffer, nil

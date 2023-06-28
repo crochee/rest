@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"log"
+    "net/http"
 
 	"github.com/crochee/reqest"
 )
@@ -22,9 +23,7 @@ func main() {
 	var result struct {
 		Content string `json:"content"`
 	}
-	if err := reqest.
-		DefaultTransport.
-		Get().
+	if err := reqest.Method(http.MethodGet).
 		Prefix("v2").
 		Query("page_size", "20").
 		Do(context.Background(), &result); err != nil {
@@ -40,6 +39,7 @@ package main
 import (
 	"context"
 	"log"
+    "net/http"
 
 	"github.com/crochee/reqest"
 )
@@ -71,7 +71,7 @@ type areaSrv struct {
 func (a areaSrv) Get(ctx context.Context, id string) (*Areas, error) {
 	var result Areas
 	if err := a.To().
-		Get().
+		Method(http.MethodGet).
 		Prefix("v2").
 		Name(id).
 		Do(ctx, &result); err != nil {

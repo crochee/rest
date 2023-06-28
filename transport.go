@@ -15,11 +15,6 @@ type Transport interface {
 	Client() http.RoundTripper
 
 	Method(string) RESTClient
-	Get() RESTClient
-	Post() RESTClient
-	Delete() RESTClient
-	Put() RESTClient
-	Patch() RESTClient
 }
 
 // DefaultTransport 默认配置的传输层实现
@@ -103,22 +98,7 @@ func (t *transporter) Method(method string) RESTClient {
 	return &restfulClient{c: t, verb: method}
 }
 
-func (t *transporter) Get() RESTClient {
-	return t.Method(http.MethodGet)
-}
-
-func (t *transporter) Post() RESTClient {
-	return t.Method(http.MethodPost)
-}
-
-func (t *transporter) Delete() RESTClient {
-	return t.Method(http.MethodDelete)
-}
-
-func (t *transporter) Put() RESTClient {
-	return t.Method(http.MethodPut)
-}
-
-func (t *transporter) Patch() RESTClient {
-	return t.Method(http.MethodPatch)
+// Method start to reqest
+func Method(method string) RESTClient {
+	return &restfulClient{c: DefaultTransport, verb: method}
 }
