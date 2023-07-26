@@ -43,7 +43,7 @@ type RESTClient interface {
 	Body(obj interface{}) RESTClient
 
 	Retry(attempts int, interval time.Duration,
-		shouldRetryFunc func(err error, statusCode int) bool) RESTClient
+		shouldRetryFunc func(*http.Response, error) bool) RESTClient
 
 	Do(ctx context.Context, result interface{}, opts ...Func) error
 
@@ -89,7 +89,7 @@ type restfulClient struct {
 	// retry
 	attempts        int
 	interval        time.Duration
-	shouldRetryFunc func(error, int) bool
+	shouldRetryFunc func(*http.Response, error) bool
 	// structural elements of the request that are part of the Kubernetes API conventions
 	resource     string
 	resourceName string
@@ -288,9 +288,11 @@ func (r *restfulClient) Body(obj interface{}) RESTClient {
 	}
 	return r
 }
-
 func (r *restfulClient) Retry(attempts int, interval time.Duration,
-	shouldRetryFunc func(err error, statusCode int) bool) RESTClient {
+	shouldRetryFunc func(*http.Response, error) bool) RESTClient {
+	if attempts <= 0 {
+		return r.AddError(fmt.Errorf("attempts must be greater than 0"))
+	}
 	r.attempts = attempts
 	r.interval = interval
 	r.shouldRetryFunc = shouldRetryFunc
@@ -309,36 +311,34 @@ func (r *restfulClient) newBackOff() backoff.BackOff {
 	return b
 }
 
-func (r *restfulClient) roundTrip(req *http.Request, operate func(*http.Request) (int, error)) error {
-	// 需要重试的条件
-	if r.attempts >= 2 && r.interval > 0 {
-		body := req.Body
-		defer body.Close()
-		req.Body = io.NopCloser(body)
+func (r *restfulClient) roundTrip(req *http.Request, operate func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	if r.attempts <= 1 {
+		return operate(req)
 	}
-	var attempts int
-	backOff := r.newBackOff() // 退避算法 保证时间间隔为指数级增长
-	currentInterval := 0 * time.Millisecond
-	t := time.NewTimer(currentInterval)
-	for {
-		select {
-		case <-t.C:
-			shouldRetry := attempts < r.attempts
-			statusCode, err := operate(req)
-			if !shouldRetry || (r.shouldRetryFunc != nil && !r.shouldRetryFunc(err, statusCode)) {
-				t.Stop()
-				return err
-			}
-			// 计算下一次
-			currentInterval = backOff.NextBackOff()
-			attempts++
-			// 定时器重置
-			t.Reset(currentInterval)
-		case <-req.Context().Done():
-			t.Stop()
-			return req.Context().Err()
+
+	body := req.Body
+	defer body.Close()
+	req.Body = io.NopCloser(body)
+
+	var (
+		attempts = 1
+		err      error
+		resp     *http.Response
+	)
+	retryOperate := func() error {
+		shouldRetry := attempts < r.attempts
+		resp, err = operate(req)
+		if !shouldRetry || (r.shouldRetryFunc != nil && !r.shouldRetryFunc(resp, err)) {
+			return nil
 		}
+		attempts++
+		return fmt.Errorf("attempt %d failed", attempts-1)
 	}
+	ctx := req.Context()
+	backOff := backoff.WithContext(r.newBackOff(), ctx)
+
+	backoff.Retry(retryOperate, backOff)
+	return resp, err
 }
 
 func (r *restfulClient) Do(ctx context.Context, result interface{}, opts ...Func) error {
@@ -350,14 +350,12 @@ func (r *restfulClient) Do(ctx context.Context, result interface{}, opts ...Func
 	if err != nil {
 		return err
 	}
-	return r.roundTrip(req, func(req *http.Request) (int, error) {
-		resp, err := r.c.RoundTrip(req)
-		if err != nil {
-			return 0, err
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode, r.c.Response().Parse(resp, result, opts...)
-	})
+	var resp *http.Response
+	if resp, err = r.roundTrip(req, r.c.RoundTrip); err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return r.c.Response().Parse(resp, result, opts...)
 }
 
 func (r *restfulClient) DoNop(ctx context.Context, opts ...Func) error {
@@ -373,18 +371,13 @@ func (r *restfulClient) DoReader(ctx context.Context) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	var resp *http.Response
+	if resp, err = r.roundTrip(req, r.c.RoundTrip); err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 	var buffer bytes.Buffer
-	if err = r.roundTrip(req, func(req *http.Request) (int, error) {
-		resp, err := r.c.RoundTrip(req)
-		if err != nil {
-			return 0, err
-		}
-		defer resp.Body.Close()
-		buffer.Reset()
-		_, err = io.Copy(&buffer, resp.Body)
-		return resp.StatusCode, err
-	}); err != nil {
+	if _, err = io.Copy(&buffer, resp.Body); err != nil {
 		return nil, err
 	}
 	return &buffer, nil
