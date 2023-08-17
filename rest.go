@@ -194,7 +194,7 @@ func (r *restfulClient) Querys(value interface{}) RESTClient {
 	if err := QueryEncoder.Encode(value, form); err != nil {
 		return r.AddError(err)
 	}
-	if r.params == nil {
+	if len(r.params) == 0 {
 		r.params = form
 		return r
 	}
@@ -224,7 +224,7 @@ func (r *restfulClient) Querys(value interface{}) RESTClient {
 }
 
 func (r *restfulClient) Headers(header http.Header) RESTClient {
-	if r.headers == nil {
+	if len(r.headers) == 0 {
 		r.headers = header
 		return r
 	}
@@ -334,8 +334,8 @@ func (r *restfulClient) roundTrip(req *http.Request, operate func(*http.Request)
 		attempts++
 		return fmt.Errorf("attempt %d failed", attempts-1)
 	}
-	ctx := req.Context()
-	backOff := backoff.WithContext(r.newBackOff(), ctx)
+
+	backOff := backoff.WithContext(r.newBackOff(), req.Context())
 
 	backoff.Retry(retryOperate, backOff)
 	return resp, err
