@@ -18,16 +18,20 @@ type Transport interface {
 }
 
 // DefaultTransport 默认配置的传输层实现
-var DefaultTransport Transport = &transporter{
-	req:          JsonRequest{},
-	roundTripper: http.DefaultTransport,
-	resp:         JsonResponse{},
-}
+var DefaultTransport = NewTransporter(JsonRequest{}, http.DefaultTransport, JsonResponse{})
 
 type transporter struct {
 	req          Requester
 	roundTripper http.RoundTripper
 	resp         Response
+}
+
+func NewTransporter(req Requester, roundTripper http.RoundTripper, resp Response) Transport {
+	return &transporter{
+		req:          req,
+		roundTripper: roundTripper,
+		resp:         resp,
+	}
 }
 
 // RoundTrip executes a single HTTP transaction, returning
@@ -95,10 +99,10 @@ func (t *transporter) Client() http.RoundTripper {
 }
 
 func (t *transporter) Method(method string) RESTClient {
-	return &restfulClient{c: t, verb: method}
+	return NewRESTClient(t, method)
 }
 
 // Method start to reqest
 func Method(method string) RESTClient {
-	return &restfulClient{c: DefaultTransport, verb: method}
+	return NewRESTClient(DefaultTransport, method)
 }
